@@ -9,10 +9,11 @@ interface Props {
   isFavorite: boolean;
   isDark: boolean;
   onToggleTheme: () => void;
+  onChangeApiKey: () => void;
   loading: boolean;
 }
 
-export default function SearchBar({ onSearch, onGeolocate, onToggleFavorite, isFavorite, isDark, onToggleTheme, loading }: Props) {
+export default function SearchBar({ onSearch, onGeolocate, onToggleFavorite, isFavorite, isDark, onToggleTheme, onChangeApiKey, loading }: Props) {
   const [query, setQuery] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
