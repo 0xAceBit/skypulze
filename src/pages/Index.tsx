@@ -101,6 +101,7 @@ export default function Index() {
           isFavorite={!!weather && favorites.includes(weather.city)}
           isDark={isDark}
           onToggleTheme={toggleTheme}
+          onChangeApiKey={() => { localStorage.removeItem('openweather_api_key'); setHasKey(false); }}
           loading={loading}
         />
 
