@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import {
   getApiKey, getFavorites, saveFavorites,
@@ -13,7 +13,8 @@ import WeatherHero from '@/components/WeatherHero';
 import ForecastList from '@/components/ForecastList';
 import FavoritesCities from '@/components/FavoritesCities';
 import WeatherAlerts from '@/components/WeatherAlerts';
-import { Loader2 } from 'lucide-react';
+import FloatingParticles from '@/components/FloatingParticles';
+import { Loader2, CloudRain } from 'lucide-react';
 
 export default function Index() {
   const { isDark, toggle: toggleTheme } = useTheme();
@@ -84,15 +85,47 @@ export default function Index() {
   if (!hasKey) return <ApiKeyPrompt onSaved={() => setHasKey(true)} />;
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="max-w-lg mx-auto px-4 py-8 space-y-6">
-        <motion.h1
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="text-2xl font-display font-bold text-foreground text-center"
+    <div className="min-h-screen bg-background relative overflow-hidden">
+      <FloatingParticles />
+      
+      <div className="max-w-lg mx-auto px-4 py-8 space-y-6 relative z-10">
+        {/* Animated logo */}
+        <motion.div
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="text-center"
         >
-          Sky<span className="text-primary">Pulse</span>
-        </motion.h1>
+          <motion.div
+            animate={{ rotate: [0, 5, -5, 0] }}
+            transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+            className="inline-block mb-1"
+          >
+            <CloudRain className="w-8 h-8 text-primary mx-auto" />
+          </motion.div>
+          <motion.h1
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="text-3xl font-display font-bold text-foreground"
+          >
+            Sky
+            <motion.span
+              className="text-primary inline-block"
+              animate={{ scale: [1, 1.05, 1] }}
+              transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+            >
+              Pulse
+            </motion.span>
+          </motion.h1>
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.4 }}
+            className="text-xs text-muted-foreground mt-1"
+          >
+            Weather that feels alive ⚡
+          </motion.p>
+        </motion.div>
 
         <SearchBar
           onSearch={handleSearch}
@@ -111,31 +144,85 @@ export default function Index() {
           onRemove={removeFavorite}
         />
 
-        {loading && (
-          <div className="flex justify-center py-16">
-            <Loader2 className="w-8 h-8 text-primary animate-spin" />
-          </div>
-        )}
+        <AnimatePresence mode="wait">
+          {loading && (
+            <motion.div
+              key="loader"
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              className="flex flex-col items-center justify-center py-16 gap-3"
+            >
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+              >
+                <Loader2 className="w-10 h-10 text-primary" />
+              </motion.div>
+              <motion.p
+                animate={{ opacity: [0.5, 1, 0.5] }}
+                transition={{ duration: 1.5, repeat: Infinity }}
+                className="text-sm text-muted-foreground"
+              >
+                Fetching the skies...
+              </motion.p>
+            </motion.div>
+          )}
 
-        {!loading && weather && (
-          <motion.div
-            key={weather.city}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="space-y-4"
-          >
-            <WeatherHero weather={weather} />
-            <WeatherAlerts alerts={alerts} />
-            {forecast.length > 0 && <ForecastList forecast={forecast} />}
-          </motion.div>
-        )}
+          {!loading && weather && (
+            <motion.div
+              key={weather.city}
+              initial={{ opacity: 0, y: 30, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ type: 'spring', stiffness: 100, damping: 15 }}
+              className="space-y-4"
+            >
+              <WeatherHero weather={weather} />
+              <WeatherAlerts alerts={alerts} />
+              {forecast.length > 0 && <ForecastList forecast={forecast} />}
+            </motion.div>
+          )}
 
-        {!loading && !weather && (
-          <div className="text-center py-16 text-muted-foreground">
-            <p className="text-4xl mb-4">🌤️</p>
-            <p className="text-sm">Search for a city or allow location access</p>
-          </div>
-        )}
+          {!loading && !weather && (
+            <motion.div
+              key="empty"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="text-center py-16"
+            >
+              <motion.p
+                className="text-6xl mb-4"
+                animate={{
+                  y: [0, -10, 0],
+                  rotate: [0, 5, -5, 0],
+                }}
+                transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+              >
+                🌤️
+              </motion.p>
+              <p className="text-sm text-muted-foreground">Search for a city or allow location access</p>
+              <motion.div
+                className="flex justify-center gap-2 mt-4"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.5 }}
+              >
+                {['🌧️', '⛈️', '🌈', '❄️', '☀️'].map((e, i) => (
+                  <motion.span
+                    key={e}
+                    className="text-2xl"
+                    animate={{ y: [0, -8, 0] }}
+                    transition={{ duration: 1.5, repeat: Infinity, delay: i * 0.2, ease: 'easeInOut' }}
+                  >
+                    {e}
+                  </motion.span>
+                ))}
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );
