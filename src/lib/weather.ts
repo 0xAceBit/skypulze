@@ -148,6 +148,7 @@ export async function fetchAlerts(lat: number, lon: number): Promise<WeatherAler
   const key = getApiKey();
   if (!key) throw new Error('API key not set');
   try {
+    checkRateLimit();
     const res = await fetch(`https://api.openweathermap.org/data/3.0/onecall?lat=${lat}&lon=${lon}&exclude=minutely,hourly,daily&appid=${key}`);
     if (!res.ok) return [];
     const d = await res.json();
