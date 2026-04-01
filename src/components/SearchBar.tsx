@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Search, MapPin, Star, Moon, Sun } from 'lucide-react';
+import { Search, MapPin, Star, Moon, Sun, KeyRound } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 interface Props {
