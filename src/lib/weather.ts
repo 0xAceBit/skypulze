@@ -97,6 +97,7 @@ export async function fetchCurrentWeather(city: string): Promise<CurrentWeather>
 export async function fetchCurrentWeatherByCoords(lat: number, lon: number): Promise<CurrentWeather> {
   const key = getApiKey();
   if (!key) throw new Error('API key not set');
+  checkRateLimit();
   const res = await fetch(`${BASE}/weather?lat=${lat}&lon=${lon}&appid=${key}&units=metric`);
   if (!res.ok) throw new Error('Failed to fetch weather');
   const d = await res.json();
