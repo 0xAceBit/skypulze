@@ -59,6 +59,14 @@ export default function SearchBar({ onSearch, onGeolocate, onToggleFavorite, isF
       </button>
 
       <button
+        onClick={onChangeApiKey}
+        title="Change API key"
+        className="p-3 rounded-xl bg-card border border-border text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors"
+      >
+        <KeyRound className="w-4 h-4" />
+      </button>
+
+      <button
         onClick={onToggleTheme}
         title="Toggle theme"
         className="p-3 rounded-xl bg-card border border-border text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors"
