@@ -72,6 +72,7 @@ const BASE = 'https://api.openweathermap.org/data/2.5';
 export async function fetchCurrentWeather(city: string): Promise<CurrentWeather> {
   const key = getApiKey();
   if (!key) throw new Error('API key not set');
+  checkRateLimit();
   const res = await fetch(`${BASE}/weather?q=${encodeURIComponent(city)}&appid=${key}&units=metric`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
