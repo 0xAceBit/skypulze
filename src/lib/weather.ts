@@ -1,6 +1,25 @@
 const API_KEY_STORAGE = 'openweather_api_key';
 const FAVORITES_STORAGE = 'weather_favorites';
 
+// Rate limiter: 60 requests per minute
+const RATE_LIMIT = 60;
+const RATE_WINDOW_MS = 60_000;
+const requestTimestamps: number[] = [];
+
+function checkRateLimit() {
+  const now = Date.now();
+  // Remove timestamps outside the window
+  while (requestTimestamps.length > 0 && requestTimestamps[0] <= now - RATE_WINDOW_MS) {
+    requestTimestamps.shift();
+  }
+  if (requestTimestamps.length >= RATE_LIMIT) {
+    const oldestInWindow = requestTimestamps[0];
+    const retryInSec = Math.ceil((oldestInWindow + RATE_WINDOW_MS - now) / 1000);
+    throw new Error(`Rate limit exceeded (${RATE_LIMIT}/min). Try again in ${retryInSec}s.`);
+  }
+  requestTimestamps.push(now);
+}
+
 export function getApiKey(): string | null {
   return localStorage.getItem(API_KEY_STORAGE);
 }
@@ -53,6 +72,7 @@ const BASE = 'https://api.openweathermap.org/data/2.5';
 export async function fetchCurrentWeather(city: string): Promise<CurrentWeather> {
   const key = getApiKey();
   if (!key) throw new Error('API key not set');
+  checkRateLimit();
   const res = await fetch(`${BASE}/weather?q=${encodeURIComponent(city)}&appid=${key}&units=metric`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -77,6 +97,7 @@ export async function fetchCurrentWeather(city: string): Promise<CurrentWeather>
 export async function fetchCurrentWeatherByCoords(lat: number, lon: number): Promise<CurrentWeather> {
   const key = getApiKey();
   if (!key) throw new Error('API key not set');
+  checkRateLimit();
   const res = await fetch(`${BASE}/weather?lat=${lat}&lon=${lon}&appid=${key}&units=metric`);
   if (!res.ok) throw new Error('Failed to fetch weather');
   const d = await res.json();
@@ -98,6 +119,7 @@ export async function fetchCurrentWeatherByCoords(lat: number, lon: number): Pro
 export async function fetchForecast(lat: number, lon: number): Promise<ForecastDay[]> {
   const key = getApiKey();
   if (!key) throw new Error('API key not set');
+  checkRateLimit();
   const res = await fetch(`${BASE}/forecast?lat=${lat}&lon=${lon}&appid=${key}&units=metric`);
   if (!res.ok) throw new Error('Failed to fetch forecast');
   const d = await res.json();
@@ -126,6 +148,7 @@ export async function fetchAlerts(lat: number, lon: number): Promise<WeatherAler
   const key = getApiKey();
   if (!key) throw new Error('API key not set');
   try {
+    checkRateLimit();
     const res = await fetch(`https://api.openweathermap.org/data/3.0/onecall?lat=${lat}&lon=${lon}&exclude=minutely,hourly,daily&appid=${key}`);
     if (!res.ok) return [];
     const d = await res.json();
