@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Search, MapPin, Star, Moon, Sun } from 'lucide-react';
+import { Search, MapPin, Star, Moon, Sun, KeyRound } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 interface Props {
@@ -9,10 +9,11 @@ interface Props {
   isFavorite: boolean;
   isDark: boolean;
   onToggleTheme: () => void;
+  onChangeApiKey: () => void;
   loading: boolean;
 }
 
-export default function SearchBar({ onSearch, onGeolocate, onToggleFavorite, isFavorite, isDark, onToggleTheme, loading }: Props) {
+export default function SearchBar({ onSearch, onGeolocate, onToggleFavorite, isFavorite, isDark, onToggleTheme, onChangeApiKey, loading }: Props) {
   const [query, setQuery] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -55,6 +56,14 @@ export default function SearchBar({ onSearch, onGeolocate, onToggleFavorite, isF
         className="p-3 rounded-xl bg-card border border-border transition-colors"
       >
         <Star className={`w-4 h-4 ${isFavorite ? 'fill-secondary text-secondary' : 'text-muted-foreground hover:text-secondary'}`} />
+      </button>
+
+      <button
+        onClick={onChangeApiKey}
+        title="Change API key"
+        className="p-3 rounded-xl bg-card border border-border text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors"
+      >
+        <KeyRound className="w-4 h-4" />
       </button>
 
       <button
