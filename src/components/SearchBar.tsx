@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Search, MapPin, Star, Moon, Sun, KeyRound } from 'lucide-react';
+import { Search, MapPin, Star, Moon, Sun } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 interface Props {
@@ -9,11 +9,10 @@ interface Props {
   isFavorite: boolean;
   isDark: boolean;
   onToggleTheme: () => void;
-  onChangeApiKey: () => void;
   loading: boolean;
 }
 
-export default function SearchBar({ onSearch, onGeolocate, onToggleFavorite, isFavorite, isDark, onToggleTheme, onChangeApiKey, loading }: Props) {
+export default function SearchBar({ onSearch, onGeolocate, onToggleFavorite, isFavorite, isDark, onToggleTheme, loading }: Props) {
   const [query, setQuery] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -47,7 +46,6 @@ export default function SearchBar({ onSearch, onGeolocate, onToggleFavorite, isF
       {[
         { onClick: onGeolocate, disabled: loading, title: 'Use my location', icon: <MapPin className="w-4 h-4" />, hover: 'hover:text-primary hover:border-primary/40 hover:shadow-md hover:shadow-primary/10' },
         { onClick: onToggleFavorite, title: isFavorite ? 'Remove from favorites' : 'Add to favorites', icon: <Star className={`w-4 h-4 transition-all duration-300 ${isFavorite ? 'fill-secondary text-secondary scale-110' : ''}`} />, hover: 'hover:text-secondary hover:border-secondary/40 hover:shadow-md hover:shadow-secondary/10' },
-        { onClick: onChangeApiKey, title: 'Change API key', icon: <KeyRound className="w-4 h-4" />, hover: 'hover:text-primary hover:border-primary/40 hover:shadow-md hover:shadow-primary/10' },
         { onClick: onToggleTheme, title: 'Toggle theme', icon: isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />, hover: 'hover:text-primary hover:border-primary/40 hover:shadow-md hover:shadow-primary/10' },
       ].map((btn, i) => (
         <motion.button
