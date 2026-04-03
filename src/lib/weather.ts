@@ -1,32 +1,4 @@
-const API_KEY_STORAGE = 'openweather_api_key';
 const FAVORITES_STORAGE = 'weather_favorites';
-
-// Rate limiter: 60 requests per minute
-const RATE_LIMIT = 60;
-const RATE_WINDOW_MS = 60_000;
-const requestTimestamps: number[] = [];
-
-function checkRateLimit() {
-  const now = Date.now();
-  // Remove timestamps outside the window
-  while (requestTimestamps.length > 0 && requestTimestamps[0] <= now - RATE_WINDOW_MS) {
-    requestTimestamps.shift();
-  }
-  if (requestTimestamps.length >= RATE_LIMIT) {
-    const oldestInWindow = requestTimestamps[0];
-    const retryInSec = Math.ceil((oldestInWindow + RATE_WINDOW_MS - now) / 1000);
-    throw new Error(`Rate limit exceeded (${RATE_LIMIT}/min). Try again in ${retryInSec}s.`);
-  }
-  requestTimestamps.push(now);
-}
-
-export function getApiKey(): string | null {
-  return localStorage.getItem(API_KEY_STORAGE);
-}
-
-export function setApiKey(key: string) {
-  localStorage.setItem(API_KEY_STORAGE, key);
-}
 
 export function getFavorites(): string[] {
   const stored = localStorage.getItem(FAVORITES_STORAGE);
@@ -67,100 +39,129 @@ export interface WeatherAlert {
   end: number;
 }
 
-const BASE = 'https://api.openweathermap.org/data/2.5';
+// WMO Weather Code mapping
+function wmoToCondition(code: number): { condition: string; description: string; icon: string } {
+  if (code === 0) return { condition: 'Clear', description: 'clear sky', icon: '01d' };
+  if (code <= 3) return { condition: 'Clouds', description: 'partly cloudy', icon: '02d' };
+  if (code <= 49) return { condition: 'Fog', description: 'fog', icon: '50d' };
+  if (code <= 59) return { condition: 'Drizzle', description: 'drizzle', icon: '09d' };
+  if (code <= 69) return { condition: 'Rain', description: 'rain', icon: '10d' };
+  if (code <= 79) return { condition: 'Snow', description: 'snow', icon: '13d' };
+  if (code <= 84) return { condition: 'Rain', description: 'rain showers', icon: '09d' };
+  if (code <= 86) return { condition: 'Snow', description: 'snow showers', icon: '13d' };
+  if (code <= 99) return { condition: 'Thunderstorm', description: 'thunderstorm', icon: '11d' };
+  return { condition: 'Clouds', description: 'cloudy', icon: '03d' };
+}
+
+interface GeoResult {
+  name: string;
+  country: string;
+  latitude: number;
+  longitude: number;
+}
+
+async function geocodeCity(city: string): Promise<GeoResult> {
+  const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=en`);
+  if (!res.ok) throw new Error('Failed to geocode city');
+  const d = await res.json();
+  if (!d.results || d.results.length === 0) throw new Error(`City "${city}" not found`);
+  const r = d.results[0];
+  return { name: r.name, country: r.country_code || '', latitude: r.latitude, longitude: r.longitude };
+}
+
+async function reverseGeocode(lat: number, lon: number): Promise<{ name: string; country: string }> {
+  // Open-Meteo doesn't have reverse geocoding, so we use a nearby city search
+  const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=&count=1&language=en`);
+  // Fallback: use coordinates as name
+  return { name: `${lat.toFixed(2)}, ${lon.toFixed(2)}`, country: '' };
+}
+
+async function fetchWeatherData(lat: number, lon: number) {
+  const params = [
+    `latitude=${lat}`,
+    `longitude=${lon}`,
+    'current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m',
+    'daily=temperature_2m_max,temperature_2m_min,weather_code,relative_humidity_2m_max',
+    'timezone=auto',
+    'forecast_days=6',
+  ].join('&');
+  const res = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`);
+  if (!res.ok) throw new Error('Failed to fetch weather data');
+  return res.json();
+}
 
 export async function fetchCurrentWeather(city: string): Promise<CurrentWeather> {
-  const key = getApiKey();
-  if (!key) throw new Error('API key not set');
-  checkRateLimit();
-  const res = await fetch(`${BASE}/weather?q=${encodeURIComponent(city)}&appid=${key}&units=metric`);
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.message || `Failed to fetch weather (${res.status})`);
-  }
-  const d = await res.json();
+  const geo = await geocodeCity(city);
+  const data = await fetchWeatherData(geo.latitude, geo.longitude);
+  const c = data.current;
+  const wmo = wmoToCondition(c.weather_code);
   return {
-    city: d.name,
-    country: d.sys.country,
-    temp: Math.round(d.main.temp),
-    feels_like: Math.round(d.main.feels_like),
-    humidity: d.main.humidity,
-    wind_speed: d.wind.speed,
-    condition: d.weather[0].main,
-    icon: d.weather[0].icon,
-    description: d.weather[0].description,
-    lat: d.coord.lat,
-    lon: d.coord.lon,
+    city: geo.name,
+    country: geo.country,
+    temp: Math.round(c.temperature_2m),
+    feels_like: Math.round(c.apparent_temperature),
+    humidity: c.relative_humidity_2m,
+    wind_speed: c.wind_speed_10m,
+    condition: wmo.condition,
+    icon: wmo.icon,
+    description: wmo.description,
+    lat: geo.latitude,
+    lon: geo.longitude,
   };
 }
 
 export async function fetchCurrentWeatherByCoords(lat: number, lon: number): Promise<CurrentWeather> {
-  const key = getApiKey();
-  if (!key) throw new Error('API key not set');
-  checkRateLimit();
-  const res = await fetch(`${BASE}/weather?lat=${lat}&lon=${lon}&appid=${key}&units=metric`);
-  if (!res.ok) throw new Error('Failed to fetch weather');
-  const d = await res.json();
+  // Try reverse geocoding via a small radius search
+  let cityName = `${lat.toFixed(2)}, ${lon.toFixed(2)}`;
+  let country = '';
+  try {
+    // Use BigDataCloud free reverse geocoding (no key needed)
+    const geoRes = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`);
+    if (geoRes.ok) {
+      const geoData = await geoRes.json();
+      cityName = geoData.city || geoData.locality || cityName;
+      country = geoData.countryCode || '';
+    }
+  } catch { /* use fallback */ }
+
+  const data = await fetchWeatherData(lat, lon);
+  const c = data.current;
+  const wmo = wmoToCondition(c.weather_code);
   return {
-    city: d.name,
-    country: d.sys.country,
-    temp: Math.round(d.main.temp),
-    feels_like: Math.round(d.main.feels_like),
-    humidity: d.main.humidity,
-    wind_speed: d.wind.speed,
-    condition: d.weather[0].main,
-    icon: d.weather[0].icon,
-    description: d.weather[0].description,
-    lat: d.coord.lat,
-    lon: d.coord.lon,
+    city: cityName,
+    country,
+    temp: Math.round(c.temperature_2m),
+    feels_like: Math.round(c.apparent_temperature),
+    humidity: c.relative_humidity_2m,
+    wind_speed: c.wind_speed_10m,
+    condition: wmo.condition,
+    icon: wmo.icon,
+    description: wmo.description,
+    lat,
+    lon,
   };
 }
 
 export async function fetchForecast(lat: number, lon: number): Promise<ForecastDay[]> {
-  const key = getApiKey();
-  if (!key) throw new Error('API key not set');
-  checkRateLimit();
-  const res = await fetch(`${BASE}/forecast?lat=${lat}&lon=${lon}&appid=${key}&units=metric`);
-  if (!res.ok) throw new Error('Failed to fetch forecast');
-  const d = await res.json();
-
-  const days: Record<string, { temps: number[]; icons: string[]; conditions: string[]; humidities: number[] }> = {};
-  for (const item of d.list) {
-    const date = item.dt_txt.split(' ')[0];
-    if (!days[date]) days[date] = { temps: [], icons: [], conditions: [], humidities: [] };
-    days[date].temps.push(item.main.temp);
-    days[date].icons.push(item.weather[0].icon);
-    days[date].conditions.push(item.weather[0].main);
-    days[date].humidities.push(item.main.humidity);
-  }
-
-  return Object.entries(days).slice(0, 5).map(([date, data]) => ({
-    date,
-    temp_min: Math.round(Math.min(...data.temps)),
-    temp_max: Math.round(Math.max(...data.temps)),
-    condition: data.conditions[Math.floor(data.conditions.length / 2)],
-    icon: data.icons[Math.floor(data.icons.length / 2)],
-    humidity: Math.round(data.humidities.reduce((a, b) => a + b, 0) / data.humidities.length),
-  }));
+  const data = await fetchWeatherData(lat, lon);
+  const daily = data.daily;
+  return daily.time.slice(1, 6).map((date: string, i: number) => {
+    const idx = i + 1; // skip today
+    const wmo = wmoToCondition(daily.weather_code[idx]);
+    return {
+      date,
+      temp_min: Math.round(daily.temperature_2m_min[idx]),
+      temp_max: Math.round(daily.temperature_2m_max[idx]),
+      condition: wmo.condition,
+      icon: wmo.icon,
+      humidity: daily.relative_humidity_2m_max[idx],
+    };
+  });
 }
 
-export async function fetchAlerts(lat: number, lon: number): Promise<WeatherAlert[]> {
-  const key = getApiKey();
-  if (!key) throw new Error('API key not set');
-  try {
-    checkRateLimit();
-    const res = await fetch(`https://api.openweathermap.org/data/3.0/onecall?lat=${lat}&lon=${lon}&exclude=minutely,hourly,daily&appid=${key}`);
-    if (!res.ok) return [];
-    const d = await res.json();
-    return (d.alerts || []).map((a: any) => ({
-      event: a.event,
-      description: a.description,
-      start: a.start,
-      end: a.end,
-    }));
-  } catch {
-    return [];
-  }
+export async function fetchAlerts(): Promise<WeatherAlert[]> {
+  // Open-Meteo free tier doesn't support alerts
+  return [];
 }
 
 export function getWeatherEmoji(condition: string): string {

@@ -2,12 +2,11 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import {
-  getApiKey, getFavorites, saveFavorites,
+  getFavorites, saveFavorites,
   fetchCurrentWeather, fetchCurrentWeatherByCoords, fetchForecast, fetchAlerts,
   type CurrentWeather, type ForecastDay, type WeatherAlert,
 } from '@/lib/weather';
 import { useTheme } from '@/hooks/useTheme';
-import ApiKeyPrompt from '@/components/ApiKeyPrompt';
 import SearchBar from '@/components/SearchBar';
 import WeatherHero from '@/components/WeatherHero';
 import ForecastList from '@/components/ForecastList';
@@ -18,7 +17,6 @@ import { Loader2, CloudRain } from 'lucide-react';
 
 export default function Index() {
   const { isDark, toggle: toggleTheme } = useTheme();
-  const [hasKey, setHasKey] = useState(!!getApiKey());
   const [loading, setLoading] = useState(false);
   const [weather, setWeather] = useState<CurrentWeather | null>(null);
   const [forecast, setForecast] = useState<ForecastDay[]>([]);
@@ -32,7 +30,7 @@ export default function Index() {
       setWeather(w);
       const [fc, al] = await Promise.all([
         fetchForecast(w.lat, w.lon),
-        fetchAlerts(w.lat, w.lon),
+        fetchAlerts(),
       ]);
       setForecast(fc);
       setAlerts(al);
@@ -79,10 +77,8 @@ export default function Index() {
   }, []);
 
   useEffect(() => {
-    if (hasKey && !weather) handleGeolocate();
-  }, [hasKey]);
-
-  if (!hasKey) return <ApiKeyPrompt onSaved={() => setHasKey(true)} />;
+    if (!weather) handleGeolocate();
+  }, []);
 
   return (
     <div className="min-h-screen bg-background relative overflow-hidden">
@@ -134,7 +130,6 @@ export default function Index() {
           isFavorite={!!weather && favorites.includes(weather.city)}
           isDark={isDark}
           onToggleTheme={toggleTheme}
-          onChangeApiKey={() => { localStorage.removeItem('openweather_api_key'); setHasKey(false); }}
           loading={loading}
         />
 
