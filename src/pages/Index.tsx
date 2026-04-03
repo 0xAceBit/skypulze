@@ -140,6 +140,8 @@ export default function Index() {
           onRemove={removeFavorite}
         />
 
+        <WeatherMap />
+
         <AnimatePresence mode="wait">
           {loading && (
             <motion.div
