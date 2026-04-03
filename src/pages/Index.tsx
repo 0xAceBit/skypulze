@@ -13,6 +13,7 @@ import ForecastList from '@/components/ForecastList';
 import FavoritesCities from '@/components/FavoritesCities';
 import WeatherAlerts from '@/components/WeatherAlerts';
 import FloatingParticles from '@/components/FloatingParticles';
+import WeatherMap from '@/components/WeatherMap';
 import { Loader2, CloudRain } from 'lucide-react';
 
 export default function Index() {
