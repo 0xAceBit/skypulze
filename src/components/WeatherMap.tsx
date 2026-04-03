@@ -1,8 +1,7 @@
-import { useState, useCallback } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { X, Thermometer, Droplets, Wind, MapPin, Loader2 } from 'lucide-react';
 import { fetchCurrentWeatherByCoords, getWeatherEmoji, type CurrentWeather } from '@/lib/weather';
 
@@ -14,20 +13,7 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
 });
 
-interface MapClickHandlerProps {
-  onMapClick: (lat: number, lng: number) => void;
-}
-
-function MapClickHandler({ onMapClick }: MapClickHandlerProps) {
-  useMapEvents({
-    click(e) {
-      onMapClick(e.latlng.lat, e.latlng.lng);
-    },
-  });
-  return null;
-}
-
-interface ClickedLocation {
+interface ClickedWeather {
   lat: number;
   lng: number;
   weather: CurrentWeather | null;
@@ -36,23 +22,73 @@ interface ClickedLocation {
 
 export default function WeatherMap() {
   const [expanded, setExpanded] = useState(false);
-  const [clicked, setClicked] = useState<ClickedLocation | null>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const markerRef = useRef<L.Marker | null>(null);
+  const [clicked, setClicked] = useState<ClickedWeather | null>(null);
 
-  const handleMapClick = useCallback(async (lat: number, lng: number) => {
-    setClicked({ lat, lng, weather: null, loading: true });
-    try {
-      const weather = await fetchCurrentWeatherByCoords(lat, lng);
-      setClicked({ lat, lng, weather, loading: false });
-    } catch {
-      setClicked({ lat, lng, weather: null, loading: false });
-    }
-  }, []);
+  useEffect(() => {
+    if (!expanded || !containerRef.current || mapRef.current) return;
+
+    const map = L.map(containerRef.current).setView([20, 0], 2);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    }).addTo(map);
+
+    map.on('click', async (e: L.LeafletMouseEvent) => {
+      const { lat, lng } = e.latlng;
+
+      if (markerRef.current) {
+        markerRef.current.setLatLng([lat, lng]);
+      } else {
+        markerRef.current = L.marker([lat, lng]).addTo(map);
+      }
+
+      markerRef.current.bindPopup('<div class="text-sm">Loading weather...</div>').openPopup();
+
+      try {
+        const weather = await fetchCurrentWeatherByCoords(lat, lng);
+        const emoji = getWeatherEmoji(weather.condition);
+        const html = `
+          <div style="min-width:160px;font-family:sans-serif;">
+            <div style="display:flex;align-items:center;gap:4px;margin-bottom:4px;">
+              <span style="font-size:1.2em;">${emoji}</span>
+              <strong style="font-size:0.9em;">${weather.city}</strong>
+            </div>
+            <div style="font-size:0.8em;line-height:1.6;">
+              🌡️ ${weather.temp}°C (feels ${weather.feels_like}°C)<br/>
+              💧 ${weather.humidity}% humidity<br/>
+              💨 ${weather.wind_speed} km/h<br/>
+              <span style="color:#666;text-transform:capitalize;">${weather.description}</span>
+            </div>
+          </div>
+        `;
+        if (markerRef.current) {
+          markerRef.current.setPopupContent(html).openPopup();
+        }
+        setClicked({ lat, lng, weather, loading: false });
+      } catch {
+        if (markerRef.current) {
+          markerRef.current.setPopupContent('<span style="color:red;font-size:0.85em;">Failed to load weather</span>').openPopup();
+        }
+        setClicked({ lat, lng, weather: null, loading: false });
+      }
+    });
+
+    mapRef.current = map;
+
+    // Ensure tiles render correctly
+    setTimeout(() => map.invalidateSize(), 300);
+
+    return () => {
+      map.remove();
+      mapRef.current = null;
+      markerRef.current = null;
+    };
+  }, [expanded]);
 
   return (
-    <motion.div
-      layout
-      className="rounded-2xl overflow-hidden border border-border/50 bg-card/80 backdrop-blur-md shadow-lg"
-    >
+    <div className="rounded-2xl overflow-hidden border border-border/50 bg-card/80 backdrop-blur-md shadow-lg">
       <button
         onClick={() => setExpanded(!expanded)}
         className="w-full flex items-center gap-2 px-4 py-3 text-sm font-medium text-foreground hover:bg-muted/50 transition-colors"
@@ -67,74 +103,21 @@ export default function WeatherMap() {
         </motion.span>
       </button>
 
-      <AnimatePresence>
-        {expanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 320, opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ type: 'spring', stiffness: 200, damping: 25 }}
-            className="relative"
+      {expanded && (
+        <div className="relative">
+          <div
+            ref={containerRef}
+            className="w-full z-0"
+            style={{ height: '320px' }}
+          />
+          <button
+            onClick={() => setExpanded(false)}
+            className="absolute top-2 right-2 z-[1000] bg-card/90 backdrop-blur-sm rounded-full p-1.5 shadow-md hover:bg-muted transition-colors"
           >
-            <MapContainer
-              center={[20, 0]}
-              zoom={2}
-              className="h-[320px] w-full z-0"
-              style={{ height: '320px' }}
-              scrollWheelZoom={true}
-            >
-              <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              />
-              <MapClickHandler onMapClick={handleMapClick} />
-              {clicked && (
-                <Marker position={[clicked.lat, clicked.lng]}>
-                  <Popup>
-                    {clicked.loading ? (
-                      <div className="flex items-center gap-2 p-1">
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        <span className="text-sm">Loading...</span>
-                      </div>
-                    ) : clicked.weather ? (
-                      <div className="p-1 min-w-[160px]">
-                        <div className="flex items-center gap-1 mb-1">
-                          <span className="text-lg">{getWeatherEmoji(clicked.weather.condition)}</span>
-                          <span className="font-semibold text-sm">{clicked.weather.city}</span>
-                        </div>
-                        <div className="space-y-1 text-xs">
-                          <div className="flex items-center gap-1">
-                            <Thermometer className="w-3 h-3" />
-                            <span>{clicked.weather.temp}°C (feels {clicked.weather.feels_like}°C)</span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <Droplets className="w-3 h-3" />
-                            <span>{clicked.weather.humidity}% humidity</span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <Wind className="w-3 h-3" />
-                            <span>{clicked.weather.wind_speed} km/h</span>
-                          </div>
-                          <div className="text-muted-foreground capitalize">{clicked.weather.description}</div>
-                        </div>
-                      </div>
-                    ) : (
-                      <span className="text-sm text-muted-foreground">Failed to load weather</span>
-                    )}
-                  </Popup>
-                </Marker>
-              )}
-            </MapContainer>
-
-            <button
-              onClick={() => setExpanded(false)}
-              className="absolute top-2 right-2 z-[1000] bg-card/90 backdrop-blur-sm rounded-full p-1.5 shadow-md hover:bg-muted transition-colors"
-            >
-              <X className="w-4 h-4 text-foreground" />
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </motion.div>
+            <X className="w-4 h-4 text-foreground" />
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
